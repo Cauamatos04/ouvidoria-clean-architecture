@@ -14,13 +14,14 @@ conexao = criarConexao(
     os.getenv("DB_NAME")
 )
 
+app = Flask(__name__)
 
 #-----------------------------
 #    VALIDAÇÃO DO CPF
 #-----------------------------
 
 def validarCPF():
-    dados = request.json()
+    dados = request.get_json()
     cpf = dados.get('cpf')
     if not cpf:
         return jsonify({'status': 'error', 'mensagem': 'CPF não enviado'}), 400
@@ -33,14 +34,17 @@ def validarCPF():
 #-----------------------------
 #      CONSULTAR DADOS 
 #-----------------------------
+
 def obter_dados():
     dados = request.get_json()
     return dados
     
+
 def cpf_enviado():
-    obter_dados
+    dados = obter_dados()
     cpf = dados.get('cpf')
     return cpf
+
 #-----------------------------
 #    CONSULTAR USUÁRIO
 #-----------------------------
@@ -48,14 +52,14 @@ def cpf_enviado():
 @app.route('/usuario/login', methods=['POST'])
 def consultar_usuario(): 
 
-    obter_dados()
-    cpf_enviado()
-    senha_digitada = dados.get('senha')
+    dados = obter_dados()
+    cpf = cpf_enviado()
 
+    senha_digitada = dados.get('senha')
+    
     validarCPF()
 
     values_cpf = [cpf]
-    # Verifica se existe cadastro
     query_cpf = 'select count(*) from rh where cpf = %s;'
     linhas_afetadas = consultarBancoDados(conexao, query_cpf, values_cpf)
 
@@ -68,29 +72,29 @@ def consultar_usuario():
        
         if bcrypt.checkpw(
             senha_digitada.encode(),
-            senha_hash.encode
+            senha_hash.encode()
         ):
             query_nome_cliente = 'select (nome) from rh where cpf = %s'
             procurar_nome_do_cliente = listarBancoDados(conexao, query_nome_cliente, [cpf])
             nome = procurar_nome_do_cliente[0][0]
 
-            return {
+            return jsonify({
                 'status': 'login concluido',
                 'cpf': cpf,
                 'nome': nome,
                 'senha': senha_hash
-                }, 200
+                }), 200
 
         else:
-            return {
+            return jsonify ({
                 'status': 'senha incorreta',
-            }, 404
+            }), 404
 
     else:
-        return {
+        return jsonify ({
             'status': 'nao_encontrado',
             'cpf': cpf
-        }, 404
+        }), 404
 
 # -----------------------------
 #    CADASTRAR USUÁRIO
@@ -99,11 +103,17 @@ def consultar_usuario():
 @app.route('/usuario/cadastro', methods=['POST'])
 def cadastrar_usuario():
 
-    obter_dados()
-    cpf_enviado()
+    dados = obter_dados()
+    cpf = cpf_enviado()
     nome = dados.get('nome')
     senha = dados.get('senha')
 
+
+    senha_hash = bcrypt.hashpw(
+    senha.encode(),
+    bcrypt.gensalt()
+).decode()
+   
     validarCPF()
 
     values = [cpf, nome]
@@ -113,7 +123,7 @@ def cadastrar_usuario():
         query_cpf = 'INSERT INTO rh (cpf,nome) VALUES (%s, %s);'
         insertNoBancoDados(conexao, query_cpf, values)
 
-        query_senha = 'INSERT INTO senha (cpf, senha_hash) VALUES (%s, SHA2(%s, 256));'
+        query_senha = 'INSERT INTO senha (cpf, senha_hash) VALUES (%s, %s);'
         insertNoBancoDados(conexao, query_senha, values_senha)
 
         conexao.commit()
@@ -137,14 +147,14 @@ def cadastrar_usuario():
 #    CADASTRAR RECLAMAÇÃO
 # -----------------------------
 
-@app.route('usuario/reclamacao', methods=['POST'])
+@app.route('/usuario/reclamacao', methods=['POST'])
 def obter_reclamacao():
     
-    obter_dados()
-    cpf_enviado()
+    dados = obter_dados()
+    cpf = cpf_enviado()
     reclamacao = dados.get('reclamacao')
     
-    values_cpf = cpf_enviado
+    values_cpf = cpf
     values_reclamacao = [reclamacao]
     query_reclamacao = 'INSERT INTO reclamacoes(cpf, descricao) VALUES (%s, %s)'
 
@@ -153,7 +163,46 @@ def obter_reclamacao():
         conexao.commit()
   
 
-        return jsonfy({
+        return jsonify({
             'status': 'reclamacao criada',
-            'cpf': cpf_enviado
-        })
+            'cpf': cpf
+        }), 201
+    
+    except Exception as e:
+        conexao.rollback()
+
+        return jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 500
+    
+# -----------------------------
+#    ACOMPANHAR RECLAMAÇÕES
+# -----------------------------
+
+@app.route('/relatorio/reclamaçao', methods=['GET'])
+def listar_Reclamacoes():
+
+    dados = obter_dados()
+    cpf = cpf_enviado()
+
+    values_cpf = [cpf]
+    query_listar_reclamacao = 'SELECT descricao FROM RECLAMACOES WHERE cpf = (%s)'
+
+    try:
+        listarBancoDados(conexao, query_listar_reclamacao, values_cpf)
+        
+        return jsonify ({
+            'status': 'ok',
+            'cpf': cpf
+        }), 200
+    
+    except Exception as e:
+
+        return jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 204
+
+
+    
