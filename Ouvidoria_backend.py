@@ -34,16 +34,21 @@ def validarCPF():
 #-----------------------------
 #      CONSULTAR DADOS 
 #-----------------------------
-
-def obter_dados():
+def tratar_dados():
     dados = request.get_json()
+    if not dados:
+        return jsonify({
+            'status': 'error',
+            'mensagem': 'Nenhum dado enviado para atualização'
+        }), 400
     return dados
     
 
 def cpf_enviado():
-    dados = obter_dados()
+    dados = tratar_dados()
     cpf = dados.get('cpf')
     return cpf
+
 
 #-----------------------------
 #    CONSULTAR USUÁRIO
@@ -204,5 +209,71 @@ def listar_Reclamacoes():
             'mensagem': str(e)
         }), 204
 
+# -----------------------------
+#  ACOMPANHAR RECLAMAÇÕES(id)
+# -----------------------------
 
+@app.route('/relatorio/<int:id_reclamacao>', methods=['GET'])
+def acompanhar_reclamacao(id_reclamacao):
+
+    values_id = [id_reclamacao]
+    query_acompanhar_reclamacao = 'SELECT descricao FROM reclamacoes WHERE id = (%s)'
+
+    try:
+        listarBancoDados(conexao, query_acompanhar_reclamacao, values_id)
+        
+        return jsonify({
+            'status': 'ok',
+            'id_reclamacao': id_reclamacao
+        }), 200
+    
+    except Exception as e:
+        
+        return jsonify({
+            'status': 'reclamacao nao encontrada',
+            'mensagem': str(e)
+        }), 404
+    
+# -----------------------------
+#  ATUALIZAR RECLAMAÇÃO(id)
+# -----------------------------
+
+@app.route('/reclamacao/<int:id_reclamacao>', methods=['PATCH'])
+def atualizar_reclamacao(id_reclamacao):
+
+    dados = tratar_dados()
+    nova_descricao = dados.get('nova_descricao')
+    
+    if not nova_descricao:
+        return jsonify({
+            'status': 'error',
+            'mensagem': 'Nova descrição não enviada'
+        }), 400
+
+    values_id = [id_reclamacao]
+    values_nova_descricao = [nova_descricao]
+    query_atualizar_reclamacao = 'UPDATE reclamacoes SET descricao = (%s) WHERE id = (%s)'
+
+    try:
+        linhas_afetadas = atualizarBancoDados(conexao, query_atualizar_reclamacao, values_nova_descricao + values_id)
+        
+        if linhas_afetadas == 0:
+            return jsonify({
+                'status' : 'reclamacao nao encontrada',
+                'id_reclamacao': id_reclamacao
+            }), 404
+
+
+        return jsonify({
+            'status': 'reclamacao atualizada',
+            'id_reclamcao': id_reclamacao,
+            'nova_descricao': nova_descricao     
+        }), 200
+    
+    except Exception as e:
+        
+        return jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 500
     
