@@ -59,13 +59,17 @@ def cpf_enviado():
     cpf = dados.get('cpf')
     return cpf
 
+# -----------------------------
+#    CONSULTAR USUÁRIO
+# -----------------------------
+
 
 def autenticar_usuario(cpf, senha_digitada):
     values_CPF = [cpf]
     query_senha_cpf = 'SELECT rh.nome, senha.senha_hash FROM rh INNER JOIN senha ON rh.cpf = senha.cpf WHERE rh.cpf = %s'
     usuario = listarBancoDados(conexao, query_senha_cpf, values_CPF)
     if not usuario:
-        erro =  jsonify({
+        erro = jsonify({
             'status': 'nao_encontrado',
             'cpf': cpf
         }), 404
@@ -89,7 +93,61 @@ def autenticar_usuario(cpf, senha_digitada):
     }), 404
     return None, erro
 # -----------------------------
-#    CONSULTAR USUÁRIO
+#        CRIAR USUÁRIO
+# -----------------------------
+
+
+def inserir_usuario(cpf, nome, senha_hash):
+    values = [cpf, nome]
+    values_senha = [cpf, senha_hash]
+    try:
+        query_cpf = 'INSERT INTO rh (cpf,nome) VALUES (%s, %s);'
+        insertNoBancoDados(conexao, query_cpf, values)
+
+        query_senha = 'INSERT INTO senha (cpf, senha_hash) VALUES (%s, %s);'
+        insertNoBancoDados(conexao, query_senha, values_senha)
+
+        conexao.commit()
+
+        return jsonify({
+            'status': 'criado',
+            'cpf': cpf,
+            'nome': nome,
+        }), 201
+
+    except Exception as e:
+        conexao.rollback()
+
+        erro = jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 500
+
+        return None, erro
+    
+def criar_reclamacao(cpf, reclamacao):
+    values = [cpf, reclamacao]
+    query_reclamacao = 'INSERT INTO reclamacoes(cpf, descricao) VALUES (%s, %s)'
+
+    try:
+        insertNoBancoDados(conexao, query_reclamacao, values)
+        conexao.commit()
+
+        return jsonify({
+            'status': 'reclamacao criada',
+            'cpf': cpf
+        }), 201
+
+    except Exception as e:
+        conexao.rollback()
+
+        erro =  jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 500
+        return None, erro
+# -----------------------------
+#        LOGIN USUÁRIO
 # -----------------------------
 
 
@@ -107,7 +165,7 @@ def consultar_usuario():
     usuario, erro = autenticar_usuario(cpf, senha_digitada)
     if erro:
         return erro
-    
+
     return usuario
 # -----------------------------
 #    CADASTRAR USUÁRIO
@@ -131,33 +189,11 @@ def cadastrar_usuario():
         bcrypt.gensalt()
     ).decode()
 
-    values = [cpf, nome]
-    values_senha = [cpf, senha_hash]
+    usuario, erro = inserir_usuario(cpf, nome, senha_hash)
+    if erro:
+        return erro
 
-    try:
-        query_cpf = 'INSERT INTO rh (cpf,nome) VALUES (%s, %s);'
-        insertNoBancoDados(conexao, query_cpf, values)
-
-        query_senha = 'INSERT INTO senha (cpf, senha_hash) VALUES (%s, %s);'
-        insertNoBancoDados(conexao, query_senha, values_senha)
-
-        conexao.commit()
-
-        return jsonify({
-            'status': 'criado',
-            'cpf': cpf_enviado(),
-            'nome': nome,
-            'senha': senha_hash
-        }), 201
-
-    except Exception as e:
-        conexao.rollback()
-
-        return jsonify({
-            'status': 'error',
-            'mensagem': str(e)
-        }), 500
-
+    return usuario
 # -----------------------------
 #    CADASTRAR RECLAMAÇÃO
 # -----------------------------
@@ -169,28 +205,17 @@ def obter_reclamacao():
     dados = tratar_dados()
     cpf = cpf_enviado()
     reclamacao = dados.get('reclamacao')
-
-    values_cpf = [cpf]
-    values_reclamacao = [reclamacao]
-    query_reclamacao = 'INSERT INTO reclamacoes(cpf, descricao) VALUES (%s, %s)'
-
-    try:
-        insertNoBancoDados(conexao, query_reclamacao,
-                           values_cpf + values_reclamacao)
-        conexao.commit()
-
-        return jsonify({
-            'status': 'reclamacao criada',
-            'cpf': cpf
-        }), 201
-
-    except Exception as e:
-        conexao.rollback()
-
+    if not reclamacao:
         return jsonify({
             'status': 'error',
-            'mensagem': str(e)
-        }), 500
+            'mensagem': 'Reclamação não enviada'
+        }), 400
+
+    reclamacao_criada, erro = criar_reclamacao(cpf, reclamacao)
+    if erro:
+        return erro
+    
+    return reclamacao_criada
 
 # -----------------------------
 #    ACOMPANHAR RECLAMAÇÕES
