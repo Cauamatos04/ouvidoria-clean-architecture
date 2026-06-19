@@ -10,8 +10,9 @@ from metodos_conexao import (
     excluirBancoDados
 )
 
+
 def validarCPF():
-    
+
     dados = request.get_json()
     cpf = dados.get('cpf')
     if not cpf:
@@ -110,7 +111,8 @@ def inserir_usuario(cpf, nome, senha_hash):
         }), 500
 
         return None, erro
-    
+
+
 def criar_reclamacao(cpf, reclamacao):
     values = [cpf, reclamacao]
     query_reclamacao = 'INSERT INTO reclamacoes(cpf, descricao) VALUES (%s, %s)'
@@ -126,8 +128,8 @@ def criar_reclamacao(cpf, reclamacao):
 
     except Exception as e:
         conexao.rollback()
-        
-        erro =  jsonify({
+
+        erro = jsonify({
             'status': 'error',
             'mensagem': str(e)
         }), 500
