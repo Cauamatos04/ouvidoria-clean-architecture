@@ -1,11 +1,11 @@
-import os 
+import os
 from metodos_conexao import *
 from flask import Flask, request, jsonify
-import bcrypt 
+import bcrypt
 
-#-----------------------------
+# -----------------------------
 #    CONEXÃO COM O SGBD
-#-----------------------------
+# -----------------------------
 
 conexao = criarConexao(
     os.getenv("DB_HOST"),
@@ -16,24 +16,34 @@ conexao = criarConexao(
 
 app = Flask(__name__)
 
-#-----------------------------
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"status": "api funcionando"}), 200
+# -----------------------------
 #    VALIDAÇÃO DO CPF
-#-----------------------------
+# -----------------------------
+
 
 def validarCPF():
     dados = request.get_json()
     cpf = dados.get('cpf')
     if not cpf:
-        return jsonify({'status': 'error', 'mensagem': 'CPF não enviado'}), 400
+        erro = jsonify({'status': 'error', 'mensagem': 'CPF não enviado'}), 400
+        return None, erro
 
     cpf = cpf.replace('.', '').replace('-', '').replace(' ', '')
 
     if len(cpf) != 11 or not cpf.isdigit():
-       return jsonify({'status': 'error', 'mensagem': 'CPF inválido'}), 400
-    
-#-----------------------------
-#      CONSULTAR DADOS 
-#-----------------------------
+        erro = jsonify({'status': 'error', 'mensagem': 'CPF inválido'}), 400
+        return None, erro
+
+    return cpf, None
+# -----------------------------
+#      CONSULTAR DADOS
+# -----------------------------
+
+
 def tratar_dados():
     dados = request.get_json()
     if not dados:
@@ -42,7 +52,7 @@ def tratar_dados():
             'mensagem': 'Nenhum dado enviado para atualização'
         }), 400
     return dados
-    
+
 
 def cpf_enviado():
     dados = tratar_dados()
@@ -50,37 +60,40 @@ def cpf_enviado():
     return cpf
 
 
-#-----------------------------
+# -----------------------------
 #    CONSULTAR USUÁRIO
-#-----------------------------
+# -----------------------------
 
 @app.route('/usuario/login', methods=['POST'])
-def consultar_usuario(): 
+def consultar_usuario():
 
-    dados = obter_dados()
+    dados = tratar_dados()
     cpf = cpf_enviado()
-
     senha_digitada = dados.get('senha')
-    
-    validarCPF()
+
+    cpf, erro = validarCPF()
+    if erro:
+        return erro
 
     values_cpf = [cpf]
     query_cpf = 'select count(*) from rh where cpf = %s;'
     linhas_afetadas = consultarBancoDados(conexao, query_cpf, values_cpf)
 
     if linhas_afetadas > 0:
-        
+
         query_validar_senha = 'select (senha_hash) from senha where cpf = %s'
-        senha_banco = listarBancoDados(conexao, query_validar_senha,values_cpf )
-        
+        senha_banco = listarBancoDados(
+            conexao, query_validar_senha, values_cpf)
+
         senha_hash = senha_banco[0][0]
-       
+
         if bcrypt.checkpw(
             senha_digitada.encode(),
             senha_hash.encode()
         ):
             query_nome_cliente = 'select (nome) from rh where cpf = %s'
-            procurar_nome_do_cliente = listarBancoDados(conexao, query_nome_cliente, [cpf])
+            procurar_nome_do_cliente = listarBancoDados(
+                conexao, query_nome_cliente, [cpf])
             nome = procurar_nome_do_cliente[0][0]
 
             return jsonify({
@@ -88,15 +101,15 @@ def consultar_usuario():
                 'cpf': cpf,
                 'nome': nome,
                 'senha': senha_hash
-                }), 200
+            }), 200
 
         else:
-            return jsonify ({
+            return jsonify({
                 'status': 'senha incorreta',
             }), 404
 
     else:
-        return jsonify ({
+        return jsonify({
             'status': 'nao_encontrado',
             'cpf': cpf
         }), 404
@@ -105,24 +118,26 @@ def consultar_usuario():
 #    CADASTRAR USUÁRIO
 # -----------------------------
 
+
 @app.route('/usuario/cadastro', methods=['POST'])
 def cadastrar_usuario():
 
-    dados = obter_dados()
+    dados = tratar_dados()
     cpf = cpf_enviado()
     nome = dados.get('nome')
     senha = dados.get('senha')
 
+    cpf, erro = validarCPF()
+    if erro:
+        return erro
 
     senha_hash = bcrypt.hashpw(
-    senha.encode(),
-    bcrypt.gensalt()
-).decode()
-   
-    validarCPF()
+        senha.encode(),
+        bcrypt.gensalt()
+    ).decode()
 
     values = [cpf, nome]
-    values_senha = [cpf, senha]
+    values_senha = [cpf, senha_hash]
 
     try:
         query_cpf = 'INSERT INTO rh (cpf,nome) VALUES (%s, %s);'
@@ -137,12 +152,12 @@ def cadastrar_usuario():
             'status': 'criado',
             'cpf': cpf_enviado(),
             'nome': nome,
-            'senha': senha
+            'senha': senha_hash
         }), 201
 
     except Exception as e:
         conexao.rollback()
-        
+
         return jsonify({
             'status': 'error',
             'mensagem': str(e)
@@ -152,27 +167,28 @@ def cadastrar_usuario():
 #    CADASTRAR RECLAMAÇÃO
 # -----------------------------
 
+
 @app.route('/usuario/reclamacao', methods=['POST'])
 def obter_reclamacao():
-    
-    dados = obter_dados()
+
+    dados = tratar_dados()
     cpf = cpf_enviado()
     reclamacao = dados.get('reclamacao')
-    
-    values_cpf = cpf
+
+    values_cpf = [cpf]
     values_reclamacao = [reclamacao]
     query_reclamacao = 'INSERT INTO reclamacoes(cpf, descricao) VALUES (%s, %s)'
 
     try:
-        insertNoBancoDados(conexao, query_reclamacao, values_cpf + values_reclamacao)
+        insertNoBancoDados(conexao, query_reclamacao,
+                           values_cpf + values_reclamacao)
         conexao.commit()
-  
 
         return jsonify({
             'status': 'reclamacao criada',
             'cpf': cpf
         }), 201
-    
+
     except Exception as e:
         conexao.rollback()
 
@@ -180,30 +196,37 @@ def obter_reclamacao():
             'status': 'error',
             'mensagem': str(e)
         }), 500
-    
+
 # -----------------------------
 #    ACOMPANHAR RECLAMAÇÕES
 # -----------------------------
 
-@app.route('/relatorio/reclamaçao', methods=['GET'])
+
+@app.route('/quantidade/reclamacao', methods=['GET'])
 def listar_Reclamacoes():
 
-    dados = obter_dados()
+    dados = tratar_dados()
     cpf = cpf_enviado()
 
     values_cpf = [cpf]
-    query_listar_reclamacao = 'SELECT descricao FROM RECLAMACOES WHERE cpf = (%s)'
+    query_listar_reclamacao = 'SELECT id, descricao FROM RECLAMACOES WHERE cpf = (%s)'
 
     try:
-        listarBancoDados(conexao, query_listar_reclamacao, values_cpf)
-        
-        return jsonify ({
+        reclamacao = listarBancoDados(
+            conexao, query_listar_reclamacao, values_cpf)
+        return jsonify({
             'status': 'ok',
-            'cpf': cpf
+            'cpf': cpf,
+            'reclamacao': [
+                {
+                    'id': descricao[0],
+                    'descricao': descricao[1]
+                }
+                for descricao in reclamacao
+            ]
         }), 200
-    
-    except Exception as e:
 
+    except Exception as e:
         return jsonify({
             'status': 'error',
             'mensagem': str(e)
@@ -213,67 +236,111 @@ def listar_Reclamacoes():
 #  ACOMPANHAR RECLAMAÇÕES(id)
 # -----------------------------
 
-@app.route('/relatorio/<int:id_reclamacao>', methods=['GET'])
+
+@app.route('/reclamacao/<int:id_reclamacao>', methods=['GET'])
 def acompanhar_reclamacao(id_reclamacao):
 
-    values_id = [id_reclamacao]
     query_acompanhar_reclamacao = 'SELECT descricao FROM reclamacoes WHERE id = (%s)'
+    values_id = [id_reclamacao]
+
+    if not values_id:
+        return jsonify({
+            'status': 'error',
+            'mensagem': 'ID da reclamação não enviado'
+        }), 400
 
     try:
         listarBancoDados(conexao, query_acompanhar_reclamacao, values_id)
-        
         return jsonify({
             'status': 'ok',
             'id_reclamacao': id_reclamacao
         }), 200
-    
+
     except Exception as e:
-        
         return jsonify({
             'status': 'reclamacao nao encontrada',
             'mensagem': str(e)
         }), 404
-    
+
 # -----------------------------
 #  ATUALIZAR RECLAMAÇÃO(id)
 # -----------------------------
+
 
 @app.route('/reclamacao/<int:id_reclamacao>', methods=['PATCH'])
 def atualizar_reclamacao(id_reclamacao):
 
     dados = tratar_dados()
+    cpf = cpf_enviado()
     nova_descricao = dados.get('nova_descricao')
-    
+
     if not nova_descricao:
         return jsonify({
             'status': 'error',
             'mensagem': 'Nova descrição não enviada'
         }), 400
 
-    values_id = [id_reclamacao]
-    values_nova_descricao = [nova_descricao]
-    query_atualizar_reclamacao = 'UPDATE reclamacoes SET descricao = (%s) WHERE id = (%s)'
+    values = [nova_descricao, cpf, id_reclamacao]
+    query_atualizar_reclamacao = 'UPDATE reclamacoes SET descricao = (%s) WHERE cpf = (%s) AND id = (%s)'
 
     try:
-        linhas_afetadas = atualizarBancoDados(conexao, query_atualizar_reclamacao, values_nova_descricao + values_id)
-        
+        linhas_afetadas = atualizarBancoDados(
+            conexao, query_atualizar_reclamacao, values)
         if linhas_afetadas == 0:
             return jsonify({
-                'status' : 'reclamacao nao encontrada',
+                'status': 'reclamacao nao encontrada',
                 'id_reclamacao': id_reclamacao
             }), 404
-
 
         return jsonify({
             'status': 'reclamacao atualizada',
             'id_reclamcao': id_reclamacao,
-            'nova_descricao': nova_descricao     
+            'nova_descricao': nova_descricao
         }), 200
-    
+
     except Exception as e:
-        
         return jsonify({
             'status': 'error',
             'mensagem': str(e)
         }), 500
-    
+
+
+@app.route('/remover/reclamacao/<int:id_reclamacao>', methods=['DELETE'])
+def excluir_reclamacao(id_reclamacao):
+
+    dados = tratar_dados()
+    cpf = cpf_enviado()
+
+    if not dados or not cpf:
+        return jsonify({
+            'status': 'error',
+            'mensagem': 'Dados ou CPF não enviados para exclusão'
+        })
+
+    values_cpf = [cpf]
+    values_id = [id_reclamacao]
+    query_excluir_reclamacao = 'DELETE FROM reclamacoes WHERE cpf = (%s) AND id = (%s)'
+
+    try:
+        linhas_afetadas = excluirBancoDados(
+            conexao, query_excluir_reclamacao, values_id + values_cpf)
+        if linhas_afetadas == 0:
+            return jsonify({
+                'status': 'reclamacao nao encontrada',
+                'id_reclamacao': id_reclamacao
+            }), 404
+
+        return jsonify({
+            'status': 'reclamacao excluida',
+            'id_reclamcao': id_reclamacao
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'mensagem': str(e)
+        }), 500
+
+
+def iniciar_sistema():
+    app.run(debug=True, port=5001)
