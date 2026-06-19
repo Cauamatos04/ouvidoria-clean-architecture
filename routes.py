@@ -11,6 +11,7 @@ from services import (
 
 app = Flask(__name__)
 
+
 @app.route('/usuario/login', methods=['POST'])
 def consultar_usuario():
 
@@ -74,7 +75,7 @@ def obter_reclamacao():
     reclamacao_criada, erro = criar_reclamacao(cpf, reclamacao)
     if erro:
         return erro
-    
+
     return reclamacao_criada
 
 # -----------------------------
@@ -92,7 +93,8 @@ def listar_Reclamacoes():
     query_listar_reclamacao = 'SELECT id, descricao FROM RECLAMACOES WHERE cpf = (%s)'
 
     try:
-        reclamacao = listarBancoDados(conexao, query_listar_reclamacao, values_cpf)
+        reclamacao = listarBancoDados(
+            conexao, query_listar_reclamacao, values_cpf)
         return jsonify({
             'status': 'ok',
             'cpf': cpf,
