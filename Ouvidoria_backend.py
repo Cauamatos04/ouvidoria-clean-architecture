@@ -60,9 +60,38 @@ def cpf_enviado():
     return cpf
 
 
+def autenticar_usuario(cpf, senha_digitada):
+    values_CPF = [cpf]
+    query_senha_cpf = 'SELECT rh.nome, senha.senha_hash FROM rh INNER JOIN senha ON rh.cpf = senha.cpf WHERE rh.cpf = %s'
+    usuario = listarBancoDados(conexao, query_senha_cpf, values_CPF)
+    if not usuario:
+        erro =  jsonify({
+            'status': 'nao_encontrado',
+            'cpf': cpf
+        }), 404
+        return None, erro
+
+    nome, senha_hash = usuario[0]
+
+    if bcrypt.checkpw(
+        senha_digitada.encode(),
+        senha_hash.encode()
+    ):
+
+        return jsonify({
+            'status': 'login concluido',
+            'cpf': cpf,
+            'nome': nome,
+        }), 200
+
+    erro = jsonify({
+        'status': 'senha incorreta',
+    }), 404
+    return None, erro
 # -----------------------------
 #    CONSULTAR USUÁRIO
 # -----------------------------
+
 
 @app.route('/usuario/login', methods=['POST'])
 def consultar_usuario():
@@ -75,45 +104,11 @@ def consultar_usuario():
     if erro:
         return erro
 
-    values_cpf = [cpf]
-    query_cpf = 'select count(*) from rh where cpf = %s;'
-    linhas_afetadas = consultarBancoDados(conexao, query_cpf, values_cpf)
-
-    if linhas_afetadas > 0:
-
-        query_validar_senha = 'select (senha_hash) from senha where cpf = %s'
-        senha_banco = listarBancoDados(
-            conexao, query_validar_senha, values_cpf)
-
-        senha_hash = senha_banco[0][0]
-
-        if bcrypt.checkpw(
-            senha_digitada.encode(),
-            senha_hash.encode()
-        ):
-            query_nome_cliente = 'select (nome) from rh where cpf = %s'
-            procurar_nome_do_cliente = listarBancoDados(
-                conexao, query_nome_cliente, [cpf])
-            nome = procurar_nome_do_cliente[0][0]
-
-            return jsonify({
-                'status': 'login concluido',
-                'cpf': cpf,
-                'nome': nome,
-                'senha': senha_hash
-            }), 200
-
-        else:
-            return jsonify({
-                'status': 'senha incorreta',
-            }), 404
-
-    else:
-        return jsonify({
-            'status': 'nao_encontrado',
-            'cpf': cpf
-        }), 404
-
+    usuario, erro = autenticar_usuario(cpf, senha_digitada)
+    if erro:
+        return erro
+    
+    return usuario
 # -----------------------------
 #    CADASTRAR USUÁRIO
 # -----------------------------
