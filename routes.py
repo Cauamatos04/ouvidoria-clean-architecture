@@ -1,5 +1,7 @@
 from flask import Flask, jsonify
 import bcrypt
+from metodos_conexao import *
+from database import conexao
 from services import (
     validarCPF,
     tratar_dados,
@@ -8,6 +10,7 @@ from services import (
     inserir_usuario,
     criar_reclamacao
 )
+
 
 app = Flask(__name__)
 
@@ -203,8 +206,7 @@ def excluir_reclamacao(id_reclamacao):
     query_excluir_reclamacao = 'DELETE FROM reclamacoes WHERE cpf = (%s) AND id = (%s)'
 
     try:
-        linhas_afetadas = excluirBancoDados(
-            conexao, query_excluir_reclamacao, values_id + values_cpf)
+        linhas_afetadas = excluirBancoDados(conexao, query_excluir_reclamacao, values_id + values_cpf)
         if linhas_afetadas == 0:
             return jsonify({
                 'status': 'reclamacao nao encontrada',
