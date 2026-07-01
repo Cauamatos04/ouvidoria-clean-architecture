@@ -4,7 +4,10 @@ import os
 
 import jwt
 
+from flask import request, jsonify
+
 from datetime import datetime, timedelta
+
 
 load_dotenv()
 
@@ -36,3 +39,17 @@ def verificar_token(token):
 
     except jwt.InvalidTokenError:
         return None, "Token inválido"
+
+
+def token_obrigatorio(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        auth = request.headers.get("Authorization")
+        if not auth or not auth.startswith("Bearer "):
+             return jsonify({"error": "Token não fornecido"}), 401
+        token = auth.split(" ")[1]
+        cpf, error = verificar_token(token)
+        if error:
+            return jsonify({"error": error}), 401
+        return func(cpf, *args, **kwargs)
+    return wrapper

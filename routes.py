@@ -2,6 +2,7 @@ from flask import Flask, jsonify
 import bcrypt
 from metodos_conexao import *
 from database import conexao
+from auth import gerar_token, token_obrigatorio
 from services import (
     validarCPF,
     tratar_dados,
@@ -29,8 +30,8 @@ def consultar_usuario():
     usuario, erro = autenticar_usuario(cpf, senha_digitada)
     if erro:
         return erro
-
-    return usuario
+    token = gerar_token(cpf)
+    return jsonify({"token": token}), 200
 # -----------------------------
 #    CADASTRAR USUÁRIO
 # -----------------------------
@@ -64,10 +65,10 @@ def cadastrar_usuario():
 
 
 @app.route('/usuario/reclamacao', methods=['POST'])
-def obter_reclamacao():
+@token_obrigatorio
+def obter_reclamacao(cpf):
 
     dados = tratar_dados()
-    cpf = cpf_enviado()
     reclamacao = dados.get('reclamacao')
     if not reclamacao:
         return jsonify({
@@ -206,7 +207,8 @@ def excluir_reclamacao(id_reclamacao):
     query_excluir_reclamacao = 'DELETE FROM reclamacoes WHERE cpf = (%s) AND id = (%s)'
 
     try:
-        linhas_afetadas = excluirBancoDados(conexao, query_excluir_reclamacao, values_id + values_cpf)
+        linhas_afetadas = excluirBancoDados(
+            conexao, query_excluir_reclamacao, values_id + values_cpf)
         if linhas_afetadas == 0:
             return jsonify({
                 'status': 'reclamacao nao encontrada',
